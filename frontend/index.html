@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset = "UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Photo gallery UI</title>
+		<link rel="stylesheet" href="./stylesheet.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <script src="upload.js" defer></script>
+		<script src="search.js" defer></script>
+		<script src="sound.js" defer></script>
+        <script type="text/javascript" src="sdk/apigClient.js"></script>
+        <script type="text/javascript" src="sdk/lib/axios/dist/axios.standalone.js"></script>
+        <script type="text/javascript" src="sdk/lib/CryptoJS/rollups/hmac-sha256.js"></script>
+        <script type="text/javascript" src="sdk/lib/CryptoJS/rollups/sha256.js"></script>
+        <script type="text/javascript" src="sdk/lib/CryptoJS/components/hmac.js"></script>
+        <script type="text/javascript" src="sdk/lib/CryptoJS/components/enc-base64.js"></script>
+        <script type="text/javascript" src="sdk/lib/url-template/url-template.js"></script>
+        <script type="text/javascript" src="sdk/lib/apiGatewayCore/sigV4Client.js"></script>
+        <script type="text/javascript" src="sdk/lib/apiGatewayCore/apiGatewayClient.js"></script>
+        <script type="text/javascript" src="sdk/lib/apiGatewayCore/simpleHttpClient.js"></script>
+        <script type="text/javascript" src="sdk/lib/apiGatewayCore/utils.js"></script>
+        </title>
+    </head>
+
+    <body>
+		<div class="container">
+			<div class="header">
+				<h1 class="logo">Smart Photo Album</h1>
+				<form class="form-inline">
+					<input type="file" id="img" name="img" title=" " accept="image/*">
+					<label for="custom-labels">Custom Labels (optional): </label>
+            		<input type="text" id="custom-labels" placeholder="label1,label2,label3">
+					<button onclick="uploadPhotos()" type="button">Upload</button>
+					<input type="text" placeholder="Search Photos" id="search-bar">
+					<button type="submit" onclick="searchPhotos()" id="clicksearch"><i class="fa fa-search"></i></button>
+					<button type="button" onclick="micFunction()" id="clickmic"><i class="fa fa-microphone"></i></button>
+					<p id="notification" class="response"></p>
+				</form>
+			</div>
+			<div class="gallery" id="photos"></div>
+		</div>
+    </body>
+</html>
