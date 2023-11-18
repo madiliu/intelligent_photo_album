@@ -1,0 +1,373 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Serverless Frontend CI/CD
+
+Resources:
+  # ===== S3 Buckets ===== #
+  hw2cloudformationassetsbucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: hw2cloudformationassetsbucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: False
+        BlockPublicPolicy: False
+        IgnorePublicAcls: False
+        RestrictPublicBuckets: false
+
+  hw2cloudformationhostingbucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      OwnershipControls:
+        Rules:
+        - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+            AllowedOrigins:
+              - '*'
+            ExposedHeaders:
+              - Date
+            Id: myCORSRuleId1
+            MaxAge: 3600
+
+  hw2s3backendbucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: hw2s3backendbucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: False
+        BlockPublicPolicy: False
+        IgnorePublicAcls: False
+        RestrictPublicBuckets: False
+
+  # ===== Bucket Policies ===== #
+  AssetBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: '*'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref hw2cloudformationassetsbucket
+                - /*
+      Bucket: !Ref hw2cloudformationassetsbucket
+
+  HostBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: '*'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref hw2cloudformationhostingbucket
+                - /*
+      Bucket: !Ref hw2cloudformationhostingbucket
+
+  BackendPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref hw2s3backendbucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:*
+            Effect: Allow
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref hw2s3backendbucket
+                - /*
+            Principal: '*'
+
+  # ===== IAM Role ===== #
+  AllRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument: |
+        {
+            "Statement": [{
+                "Effect": "Allow",
+                "Principal": { "Service": [ "codebuild.amazonaws.com", "codepipeline.amazonaws.com", "lambda.amazonaws.com", "s3.amazonaws.com", "es.amazonaws.com","cloudformation.amazonaws.com"]},
+                "Action": [ "sts:AssumeRole" ]
+            }]
+        }
+      Policies:
+        - PolicyName: all-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Resource: "*"
+                Effect: Allow
+                Action: "*"
+
+  # ===== Codebuild Projects ===== #
+  FEBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: "CODEPIPELINE"
+      Source:
+        Type: "CODEPIPELINE"
+        BuildSpec: |
+          version: 0.1
+          phases:
+            install:
+              commands:
+                - echo Installing packages for client
+            build:
+              commands:
+                - echo Building client
+          artifacts :
+            files :
+              - '**/*'
+      Environment:
+        ComputeType: "BUILD_GENERAL1_SMALL"
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:3.0"
+        Type: "LINUX_CONTAINER"
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: PUBLIC_URL
+            Value: '/'
+      Name: !Sub ${AWS::StackName}-build-FE
+      ServiceRole: !Ref AllRole
+
+  FEDeployProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: "CODEPIPELINE"
+      Source:
+        Type: "CODEPIPELINE"
+        BuildSpec: |
+          version: 0.1
+          phases:
+            build:
+              commands:
+                - echo Deploying client to S3
+                - aws s3 cp . s3://$S3_CLIENT_BUCKET --recursive
+          artifacts:
+            files: '**/*'
+      Environment:
+        ComputeType: "BUILD_GENERAL1_SMALL"
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:3.0"
+        Type: "LINUX_CONTAINER"
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: "us-east-1"
+          - Name: S3_CLIENT_BUCKET
+            Value: !Ref hw2cloudformationhostingbucket
+      Name: !Sub ${AWS::StackName}-deploy-FE
+      ServiceRole: !Ref AllRole
+
+  BEBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: "CODEPIPELINE"
+      Source:
+        Type: "CODEPIPELINE"
+      Environment:
+        ComputeType: "BUILD_GENERAL1_SMALL"
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:3.0"
+        Type: "LINUX_CONTAINER"
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: PUBLIC_URL
+            Value: '/'
+      Name: !Sub ${AWS::StackName}-build-BE
+      ServiceRole: !Ref AllRole
+
+  # ===== CodePipeline ===== #
+  FrontendPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt AllRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref hw2cloudformationassetsbucket
+      Stages:
+        - Name: FESource
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              Configuration:
+                Owner: "honey-grapes"
+                Repo: "hw2-photo-album-frontend"
+                Branch: "main"
+                OAuthToken: "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"
+              OutputArtifacts:
+                - Name: FESourceArtifact
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: FEBuildStep
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref FEBuildProject
+              InputArtifacts:
+                - Name: FESourceArtifact
+              OutputArtifacts:
+                - Name: FEBuildArtifact
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: FEDeployStep
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref FEDeployProject
+              InputArtifacts:
+                - Name: FEBuildArtifact
+              OutputArtifacts:
+                - Name: FEDeployArtifact
+              RunOrder: 1
+
+  BackendPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt AllRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref hw2cloudformationassetsbucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: BESource
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              Configuration:
+                Owner: "honey-grapes"
+                Repo: "hw2-photo-album-backend"
+                Branch: "main"
+                OAuthToken: "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"
+              OutputArtifacts:
+                - Name: BESourceArtifact
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: BEBuildStep
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref BEBuildProject
+              InputArtifacts:
+                - Name: BESourceArtifact
+              OutputArtifacts:
+                - Name: BEBuildArtifact
+              RunOrder: 1
+              Region: "us-east-1"
+        - Name: Deploy
+          Actions:
+            - Name: Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: "1"
+              RunOrder: 1
+              Configuration:
+                ActionMode: REPLACE_ON_FAILURE
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+                RoleArn: !GetAtt AllRole.Arn
+                StackName: "photo-album-backend"
+                TemplatePath: BEBuildArtifact::outputsamtemplate.yml
+              OutputArtifacts: [ ]
+              InputArtifacts:
+                - Name: BEBuildArtifact
+              Region: us-east-1
+
+  # ===== OpenSearch ===== #
+  opensearch:
+      Type: AWS::OpenSearchService::Domain
+      Properties:
+        AccessPolicies:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: '*'
+              Action: 'es:*'
+              Resource: !Sub "arn:aws:es:us-east-1:$(AWS::AccountId):domain/cfphotos/*"
+        AdvancedOptions:
+          indices.fielddata.cache.size: '20'
+          indices.query.bool.max_clause_count: '1024'
+          override_main_response_version: False
+          rest.action.multi.allow_explicit_index: True
+        ClusterConfig:
+          InstanceType: 't3.small.search'
+          InstanceCount: 1
+          DedicatedMasterEnabled: False
+          ZoneAwarenessEnabled: False
+          WarmEnabled: False
+        CognitoOptions:
+          Enabled: False
+        DomainEndpointOptions:
+          EnforceHTTPS: True
+          TLSSecurityPolicy: Policy-Min-TLS-1-0-2019-07
+          CustomEndpointEnabled: False
+        DomainName: 'cfphotos'
+        EBSOptions:
+          EBSEnabled: True
+          VolumeType: gp2
+          VolumeSize: 10
+        EncryptionAtRestOptions:
+          Enabled: true
+        NodeToNodeEncryptionOptions:
+          Enabled: true
+
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt
+      - hw2cloudformationhostingbucket
+      - WebsiteURL
+    Description: URL for website hosted on S3
+  S3BucketSecureURL:
+    Value: !Join
+      - ''
+      - - 'https://'
+        - !GetAtt
+          - hw2cloudformationhostingbucket
+          - DomainName
+    Description: Name of S3 bucket to hold website content
