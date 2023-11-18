@@ -3,7 +3,7 @@
 The [Intelligent Photo Album](http://deployment-hw2cloudformationhostingbucket-l7tdoaxzw9nb.s3-website-us-east-1.amazonaws.com/) is a serverless, microservice-driven web application that enables users to upload photos, index them with custom label, then search photos using text or microphone. 
 
 ## Architecture 
-<img width="731" alt="Screenshot 2023-11-18 at 5 04 18 PM" src="https://github.com/madiliu/intelligent_photo_album/assets/90917906/b794a381-b83a-451b-9a4c-c75e6fd99d40">
+<img width="728" alt="Screenshot 2023-11-18 at 6 23 12 PM" src="https://github.com/madiliu/intelligent_photo_album/assets/90917906/6ef79273-7dd0-4a82-a9a3-723bfe306c83">
 
 ## Stack
 * [S3](https://aws.amazon.com/s3/) - hosts the frontend and photos, ensures scalability, availability, and durability
